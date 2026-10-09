@@ -19,7 +19,7 @@
     .card .value { font-size: 28px; font-weight: 700; margin-top: 8px; color: #f8fafc; }
     .card .subtext { font-size: 12px; color: #38bdf8; margin-top: 4px; }
 
-    /* Layout principal: Tabela + Adicionar */
+    /* Layout principal */
     .main-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 28px; }
     @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
 
@@ -32,6 +32,7 @@
     table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
     th { color: #94a3b8; font-weight: 600; padding: 12px 8px; border-bottom: 1px solid #334155; }
     td { padding: 12px 8px; border-bottom: 1px solid #334155; color: #e2e8f0; }
+    .empty-state { text-align: center; padding: 32px 8px; color: #64748b; font-size: 14px; }
 
     /* Badges de Status */
     .badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; display: inline-block; }
@@ -59,7 +60,7 @@
       <p class="subtitle">Controle de renovações, expirações e faturamento em tempo real.</p>
     </header>
 
-    <!-- Cards de Métricas (MRR, Clientes, Vencimentos) -->
+    <!-- Cards de Métricas -->
     <section class="metrics-grid">
       <div class="card">
         <div class="title">MRR (Faturamento Mensal)</div>
@@ -104,12 +105,12 @@
             </tr>
           </thead>
           <tbody id="license-table-body">
-            <!-- Dados inseridos via JS -->
+            <!-- Registos inseridos via JS -->
           </tbody>
         </table>
       </main>
 
-      <!-- Formulário para Adicionar / Cadastrar -->
+      <!-- Formulário para Adicionar -->
       <aside class="panel">
         <div class="panel-header">
           <div class="panel-title">Cadastrar Nova Licença</div>
@@ -125,7 +126,7 @@
           </div>
           <div class="form-group">
             <label for="monthly-price">Valor Mensal (R$)</label>
-            <input type="number" id="monthly-price" value="90.00" step="0.01" required>
+            <input type="number" id="monthly-price" placeholder="90.00" step="0.01" required>
           </div>
           <div class="form-group">
             <label for="days-valid">Validade Inicial (Dias)</label>
@@ -139,28 +140,29 @@
   </div>
 
   <script>
-    // Dados iniciais de demonstração
-    let licenses = [
-      { id: 1, client: "Carlos Eduardo", key: "BOT-98A1-8812", price: 90.00, expiration: getFutureDate(12) },
-      { id: 2, client: "Juliana Mendes", key: "BOT-12F4-0921", price: 120.00, expiration: getFutureDate(2) },
-      { id: 3, client: "Lucas Souza", key: "BOT-55B9-3301", price: 90.00, expiration: getFutureDate(-3) },
-      { id: 4, client: "Empresa Tech", key: "BOT-77K8-9942", price: 250.00, expiration: getFutureDate(25) }
-    ];
+    // Inicializa a lista de licenças vazia ou carrega do localStorage do navegador
+    let licenses = JSON.parse(localStorage.getItem('bot_licenses')) || [];
 
-    // Helper para gerar datas relativas
+    function saveToStorage() {
+      localStorage.setItem('bot_licenses', JSON.stringify(licenses));
+    }
+
     function getFutureDate(days) {
       const date = new Date();
       date.setDate(date.getDate() + days);
       return date.toISOString().split('T')[0];
     }
 
-    // Calcula diferença em dias até a expiração
     function getDaysRemaining(expirationDateStr) {
       const today = new Date();
       today.setHours(0,0,0,0);
       const expDate = new Date(expirationDateStr + "T00:00:00");
       const diffTime = expDate - today;
       return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    }
+
+    function generateKey() {
+      return 'BOT-' + Math.random().toString(36).substring(2, 6).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
     }
 
     function renderTable() {
@@ -173,26 +175,37 @@
       let warningCount = 0;
       let expiredCount = 0;
 
-      licenses.forEach((item) => {
-        const daysLeft = getDaysRemaining(item.expiration);
-        let statusBadge = '';
+      const filteredLicenses = licenses.filter(item => 
+        item.client.toLowerCase().includes(search) || item.key.toLowerCase().includes(search)
+      );
 
-        if (daysLeft < 0) {
-          statusBadge = `<span class="badge badge-expired">Expirado (${Math.abs(daysLeft)}d atrás)</span>`;
-          expiredCount++;
-        } else if (daysLeft <= 5) {
-          statusBadge = `<span class="badge badge-warning">Vence em ${daysLeft}d</span>`;
-          warningCount++;
-          activeCount++;
-          mrr += item.price;
-        } else {
-          statusBadge = `<span class="badge badge-active">Ativo (${daysLeft}d restantes)</span>`;
-          activeCount++;
-          mrr += item.price;
-        }
+      if (filteredLicenses.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" class="empty-state">
+              ${licenses.length === 0 ? 'Nenhuma licença cadastrada. Use o formulário ao lado para adicionar.' : 'Nenhum registo encontrado para a busca.'}
+            </td>
+          </tr>
+        `;
+      } else {
+        filteredLicenses.forEach((item) => {
+          const daysLeft = getDaysRemaining(item.expiration);
+          let statusBadge = '';
 
-        // Filtro de busca
-        if (item.client.toLowerCase().includes(search) || item.key.toLowerCase().includes(search)) {
+          if (daysLeft < 0) {
+            statusBadge = `<span class="badge badge-expired">Expirado (${Math.abs(daysLeft)}d atrás)</span>`;
+            expiredCount++;
+          } else if (daysLeft <= 5) {
+            statusBadge = `<span class="badge badge-warning">Vence em ${daysLeft}d</span>`;
+            warningCount++;
+            activeCount++;
+            mrr += item.price;
+          } else {
+            statusBadge = `<span class="badge badge-active">Ativo (${daysLeft}d restantes)</span>`;
+            activeCount++;
+            mrr += item.price;
+          }
+
           const row = `
             <tr>
               <td>
@@ -209,10 +222,10 @@
             </tr>
           `;
           tbody.innerHTML += row;
-        }
-      });
+        });
+      }
 
-      // Atualiza métricas no topo
+      // Atualiza valores nas métricas
       document.getElementById('mrr-val').innerText = `R$ ${mrr.toFixed(2)}`;
       document.getElementById('mrr-sub').innerText = `${activeCount} licenças pagas ativas`;
       document.getElementById('active-val').innerText = activeCount;
@@ -236,31 +249,36 @@
       };
 
       licenses.push(newLicense);
+      saveToStorage();
       renderTable();
-      
-      // Reseta form
+
+      // Limpa os campos do formulário
       document.getElementById('client-name').value = '';
-      document.getElementById('license-key').value = 'BOT-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+      document.getElementById('monthly-price').value = '';
+      document.getElementById('license-key').value = generateKey();
     }
 
     function renewLicense(id) {
       const item = licenses.find(l => l.id === id);
       if (item) {
         const daysLeft = getDaysRemaining(item.expiration);
-        // Se já expirou, adiciona 30 dias a partir de hoje; se está ativo, soma +30 dias na data limite
         const baseDays = daysLeft < 0 ? 0 : daysLeft;
         item.expiration = getFutureDate(baseDays + 30);
+        saveToStorage();
         renderTable();
       }
     }
 
     function deleteLicense(id) {
-      licenses = licenses.filter(l => l.id !== id);
-      renderTable();
+      if (confirm("Tem certeza que deseja excluir esta licença?")) {
+        licenses = licenses.filter(l => l.id !== id);
+        saveToStorage();
+        renderTable();
+      }
     }
 
-    // Inicializar chave aleatória no formulário
-    document.getElementById('license-key').value = 'BOT-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+    // Gerar chave inicial no campo
+    document.getElementById('license-key').value = generateKey();
 
     // Renderizar tabela inicial
     renderTable();
